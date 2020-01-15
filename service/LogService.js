@@ -1,4 +1,4 @@
-/* global GLOBAL */
+/* global global */
 /**
  * Created by chriscai on 2014/12/16.
  */
@@ -17,7 +17,7 @@ var request = require("request");
 var LogService = function() {
 
     /*
-        if(GLOBAL.DEBUG){
+        if(global.DEBUG){
             this.queryUrl = 'http://localhost:9000/query';
         }else {
             this.queryUrl = 'http://10.143.132.205:9000/query';
@@ -25,9 +25,9 @@ var LogService = function() {
         }
     */
 
-    this.queryUrl = GLOBAL.pjconfig.storage.queryUrl;
-    this.pushProjectUrl = GLOBAL.pjconfig.acceptor.pushProjectUrl;
-    this.pushProjectUrl2 = GLOBAL.pjconfig.openapi.pushProjectUrl;
+    this.queryUrl = global.pjconfig.storage.queryUrl;
+    this.pushProjectUrl = global.pjconfig.acceptor.pushProjectUrl;
+    this.pushProjectUrl2 = global.pjconfig.openapi.pushProjectUrl;
 
     // this.url = 'http://127.0.0.1:9000/query';
     logger.debug('query url : ' + this.queryUrl);
@@ -37,13 +37,13 @@ var LogService = function() {
 
 LogService.prototype = {
     query: function(params, callback) {
-
+        var startDate = new Date;
         var strParams = '';
         for (var key in params) {
             if (key == 'index') {
-                strParams += key + '=' + params[key] + '&';
+                strParams += key + "=" + params[key] + "&";
             } else {
-                strParams += key + '=' + JSON.stringify(params[key]) + '&';
+                strParams += key + "=" + encodeURIComponent(JSON.stringify(params[key])) + "&";
             }
         }
         strParams += '_=1';
@@ -58,6 +58,7 @@ LogService.prototype = {
                 } catch (e) {
                     callback(e);
                 }
+                logger.info('query log spend : ' + (new Date - startDate) + "ms by " + params.id);
             });
 
         }).on('error', function(err) {
@@ -79,11 +80,18 @@ LogService.prototype = {
                 var projectsInfo = {};
 
                 _.each(item, function(value) {
-                    projectsInfo[value.id] = {id : value.id , url : value.url , appkey : value.appkey};
+
+                    try{
+                        value.blacklist =  JSON.parse(value.blacklist || {})
+                    }catch(e){
+                        value.blacklist = {}
+                    }
+
+                    projectsInfo[value.id] = {id : value.id , url : value.url , blacklist : value.blacklist , appkey : value.appkey};
                 });
 
                 var result = [0, 0];
-                
+
                 var resultCall = function() {
                     if (result[0] < 0 && result[1] < 0) {
                         callback(new Error("error"));

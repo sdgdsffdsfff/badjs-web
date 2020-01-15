@@ -4,7 +4,7 @@ var Delegator = require("delegator");
 var logTable = require("./template/logTable.ejs");
 var keyword = require("./template/keyword.ejs");
 var debar = require("./template/debar.ejs");
-
+var logDetailDialog = require("./logDetailDialog/logDetailDialog");
 
 var logConfig = {
         id: 0,
@@ -18,6 +18,10 @@ var logConfig = {
 
     encodeHtml = function(str) {
         return (str + '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\x60/g, '&#96;').replace(/\x27/g, '&#39;').replace(/\x22/g, '&quot;');
+    },
+
+    formatMsg = function (str){
+        return str.replace(/@/gi , '<br/><b style="color:#A78830;">@</b> ')
     };
 
 var websocket;
@@ -105,17 +109,26 @@ function bindEvent() {
                 $(this).data("stop", true);
                 $('#log-table').html('');
                 startMonitor(logConfig.id);
-                $(this).text('停止监听');
+                $(this).addClass("stop").text('停止监听');
             } else {
                 $(this).data("stop", false);
                 websocket.close();
-                $(this).text('开始监听');
+                $(this).removeClass("stop").text('开始监听');
             }
 
         })
-        .on('click', 'showSource', function(e, data) {
-            // 内网服务器，拉取不到 外网数据,所以屏蔽掉请求
-            return;
+        .on('click', 'alertModal', function(e, data) {
+            var $target=$(e.currentTarget);
+
+            logDetailDialog({
+                id :$target.text(),
+                time :$target.siblings('.td-2').text(),
+                info :$target.siblings('.td-3').html(),
+                uin :$target.siblings('.td-4').text(),
+                ip :$target.siblings('.td-5').text(),
+                agent : $target.siblings('.td-6').attr("title"),
+                source :   $target.siblings('.td-7').html() ,
+            })
 
         }).on('change', 'selectBusiness', function() {
             var val = $(this).val() - 0;
@@ -124,7 +137,14 @@ function bindEvent() {
             currentIndex = 0;
             noData = false;
             logConfig.id = val;
-
+        }).on('click', 'showTd', function(e) {
+            var $target=$(e.currentTarget).toggleClass('active');
+            $('.main-table .'+$target.data('td')).toggleClass('active');
+            //保存用户偏好，隐藏为true
+            //console.log($target.data('td'));
+            localStorage.setItem($target.data('td'),!$target.hasClass('active'));
+            //console.log(localStorage);
+            window.classes[$target.data('td')]=$target.hasClass('active')?'active':'';
         }).on('click', 'errorTypeClick', function() {
             if ($(this).hasClass('msg-dis')) {
                 logConfig.level.push(4);
@@ -207,7 +227,8 @@ function showLogs(data) {
     var param = {
         encodeHtml: encodeHtml,
         set: Delegator.set,
-        startIndex: currentIndex
+        startIndex: currentIndex,
+        formatMsg : formatMsg
     };
 
     var $table = $('#log-table');
@@ -222,10 +243,24 @@ function showLogs(data) {
     currentIndex++;
 }
 
-
-
 function init() {
     bindEvent();
+    //读取用户偏好
+    var items=$("#content .right-side .setting-show .item");
+    window.classes={};
+    //console.log(localStorage);
+    for(var i=0;i<items.length;i++){
+        var item=$(items[i]);
+        if(localStorage.getItem(item.data("td"))==='true'){
+            item.removeClass('active');
+            $('.main-table .'+item.data('td')).removeClass('active');
+            window.classes[item.data('td')]='';
+        }else{
+            window.classes[item.data('td')]='active';
+        }
+    }
+    $('#content .mid-side .main-table thead tr').show();
+    $('#content .right-side .setting-show').show();
 }
 
 exports.init = init;

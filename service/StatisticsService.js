@@ -36,8 +36,8 @@ var StatisticsService = function() {
     this.statisticsDao = global.models.statisticsDao;
     this.applyDao = global.models.applyDao;
 
-    this.triggerUrl = GLOBAL.pjconfig.storage.errorMsgTopCacheUrl;
-    this.url = GLOBAL.pjconfig.storage.errorMsgTopUrl;
+    //this.triggerUrl = global.pjconfig.storage.errorMsgTopCacheUrl;
+    this.url = global.pjconfig.storage.errorMsgTopUrl;
 
     logger.debug('query url : ' + this.url);
 };
@@ -84,7 +84,7 @@ StatisticsService.prototype = {
         param.startTime = new Date() - oneDay * day;
         param.startTime = dateFormat(new Date(param.startTime), 'yyyy-MM-dd');
 
-        if (GLOBAL.DEBUG) {
+        if (global.DEBUG) {
             logger.debug("query start time is " + param.startTime);
         }
         this.statisticsDao.find(s_params)
@@ -113,6 +113,8 @@ StatisticsService.prototype = {
             }).on('end', function() {
                 var saveModel = {};
                 try {
+                    //replace emoji to empty , mysql unsupported emoji code
+                    buffer=buffer.replace(/\ud83d[\udc00-\udfff]/gi , "")
                     var result = JSON.parse(buffer);
 
                     _.forEach(result.item, function(value, key) {
@@ -127,11 +129,12 @@ StatisticsService.prototype = {
                         total: result.pv
                     };
                 } catch (err) {
-                    logger.error('error :' + err);
+                    logger.error('parse statistic result error(id='+id+') :' + err);
                     saveModel = {
                         startDate: startDate,
-                        endDate: startDate + 86400000,
+                        endDate: new Date(+startDate + 86400000-1),
                         content: "[]",
+                        projectId: id,
                         total: 0
                     };
                 }
@@ -149,24 +152,24 @@ StatisticsService.prototype = {
         });
     },
 
-    triggerStorageCache: function(ids, startDate, cb) {
-        http.get((this.triggerUrl + '?ids=' + ids + '&startDate=' + (startDate - 0)), function(res) {
-            //  res.on("end" , function (){
-            cb();
-            // });
-        }).on('error', function(err) {
-            cb(err);
-            logger.error('triggerStorageCache error :' + err);
-        });
-    },
+    //triggerStorageCache: function(ids, startDate, cb) {
+    //    http.get((this.triggerUrl + '?ids=' + ids + '&startDate=' + (startDate - 0)), function(res) {
+    //        //  res.on("end" , function (){
+    //        cb();
+    //        // });
+    //    }).on('error', function(err) {
+    //        cb(err);
+    //        logger.error('triggerStorageCache error :' + err);
+    //    });
+    //},
 
     startMonitor: function() {
         var self = this;
 
 
-        var getTomorrowDay = function() {
+        var getFetchDate = function() {
             var tomorrow = new Date(nowDate);
-            tomorrow.setHours(1, 0, 0, 0);
+            tomorrow.setHours(2, 0, 0, 0);
             tomorrow.setDate(tomorrow.getDate() + 1);
             return tomorrow;
         };
@@ -178,7 +181,7 @@ StatisticsService.prototype = {
         };
 
         var nowDate = new Date;
-        var targetDate = getTomorrowDay();
+        var targetDate = getFetchDate();
 
         var startTimeout = function() {
             var afterDate = targetDate - nowDate;
@@ -201,21 +204,25 @@ StatisticsService.prototype = {
                         ids += "_" + value.id;
                     });
 
-                    self.triggerStorageCache(ids, startDate, function(err) {
-                        logger.info("trigger success and after 5400000s fetch result");
-                        if (!err) {
-                            setTimeout(function() {
+                    //self.triggerStorageCache(ids, startDate, function(err) {
+                    //    logger.info("trigger success and after 5400000s fetch result");
+                        //if (!err) {
+                        //    setTimeout(function() {
                                 logger.info("start fetching result ... ");
+                                var count = 0;
                                 _.each(item, function(value, key) {
-                                    self.fetchAndSave(value.id, startDate);
+                                    setTimeout(function (){
+                                        self.fetchAndSave(value.id, startDate);
+                                    }, count * 500)
+                                     count ++;
                                 });
-                            }, 5400000); // 1个半小时候后，拉取统计
+                            //}, 5400000); // 1个半小时候后，拉取统计
 
-                        }
-                    });
+                        //}
+                    //});
 
                     nowDate = new Date();
-                    targetDate = getTomorrowDay();
+                    targetDate = getFetchDate();
 
                     startTimeout();
                 });

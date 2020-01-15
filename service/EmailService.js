@@ -1,4 +1,4 @@
-/* global global, GLOBAL, module, __dirname, Buffer */
+/* global global, global, module, __dirname, Buffer */
 /**
  * Created by kaelyang on 2015/5/19.
  */
@@ -12,16 +12,16 @@ var UserService = require('./UserService');
 var dateFormat = require("../utils/dateFormat");
 var exporting = require('node-highcharts-exporting');
 var StatisticsService = require('./StatisticsService');
-var sendEmail = require("../utils/" + GLOBAL.pjconfig.email.module);
+var sendEmail = require("../utils/" + global.pjconfig.email.module);
 
 var DAY_LENGTH = 30;
 
 var EmailService = function() {
     this.userService = new UserService();
     this.statisticsService = new StatisticsService();
-    this.top = parseInt(GLOBAL.pjconfig.email.top, 10) || 20;
-    this.from = GLOBAL.pjconfig.email.from || "noreply-badjs@tencent.com";
-    this.homepage = GLOBAL.pjconfig.email.homepage;
+    this.top = parseInt(global.pjconfig.email.top, 10) || 20;
+    this.from = global.pjconfig.email.from || "noreply-badjs@tencent.com";
+    this.homepage = global.pjconfig.email.homepage;
 };
 
 var getYesterday = function() {
@@ -89,7 +89,7 @@ var getImageData = function(name, data) {
 };
 
 var encodeHtml = function(str) {
-    return (str + '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\x60/g, '&#96;').replace(/\x27/g, '&#39;').replace(/\x22/g, '&quot;');
+    return (str + '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\x60/g, '&#96;').replace(/\x27/g, '&#39;').replace(/\x22/g, '&quot;').replace(/\u0000/g, ' ');
 };
 
 EmailService.prototype = {
@@ -107,7 +107,7 @@ EmailService.prototype = {
 
             if (imagePath) {
                 html.push('<h4>最近' + DAY_LENGTH + '天图表统计</h4>');
-                html.push('<p><img src="' + GLOBAL.pjconfig.host + imagePath + '"></p>');
+                html.push('<p><img src="' + global.pjconfig.host + imagePath + '"></p>');
             }
 
             html.push('<table style="border-collapse:collapse;;width:95%"><tr style="background-color:#188eee;text-align:left;color:#fff"><th style="padding:2px 0 2px 10px;border:1px solid #dedede;width:60px">#</th><th style="padding:2px 0 2px 10px;border:1px solid #dedede;;width:120px">出现次数</th><th style="padding:2px 0 2px 10px;border:1px solid #dedede">错误内容</th></tr>');
@@ -156,7 +156,7 @@ EmailService.prototype = {
                 userlist.forEach(function(v) {
                     // 兼容没有登陆过的用户，自动拼接 邮箱后缀
                     if (!v.email) {
-                        v.email = v.loginName + GLOBAL.pjconfig.email.emailSuffix;
+                        v.email = v.loginName + global.pjconfig.email.emailSuffix;
                     }
                     if (orderByApplyId[v.applyId]) {
                         orderByApplyId[v.applyId].push(v);
@@ -164,6 +164,7 @@ EmailService.prototype = {
                         orderByApplyId[v.applyId] = [v];
                     }
                 });
+                var count = 0 ;
                 for (var applyId in orderByApplyId) {
                     (function(users, applyId) {
                         var to_list = []; // 收件方
@@ -184,13 +185,12 @@ EmailService.prototype = {
                             }
                             cc_list = [];
                         }
-
                         that.statisticsService.queryById({
                             top: that.top,
                             projectId: applyId,
                             startDate: that.date
                         }, function(err, data) {
-                            if (err) return logger.error('Send email statisticsService queryById error');
+                            if (err) return logger.error('Send email statisticsService queryById error ' + applyId);
                             if (data && data.length > 0) {
                                 that.statisticsService.queryByChart({
                                     projectId: applyId,
@@ -203,30 +203,33 @@ EmailService.prototype = {
                                             title: name
                                         }, data[0]);
                                     } else {
-                                        exporting(getImageData(name, chartData.data), function(err, image) {
-                                            if (err) {
-                                                logger.info("generate image error " + err.toString() + ", id =" + applyId);
-                                                that.sendEmail({
-                                                    to: to_list,
-                                                    cc: cc_list,
-                                                    title: name
-                                                }, data[0]);
-                                            } else {
-                                                var imagePath = "static/img/tmp/" + (new Date - 0 + applyId) + ".png";
-                                                fs.writeFile(path.join(__dirname, "..", imagePath), new Buffer(image, 'base64'), function() {
+                                        count ++ ;
+                                        setTimeout(function (){
+                                            exporting(getImageData(name, chartData.data), function(err, image) {
+                                                if (err) {
+                                                    logger.info("generate image error " + err.toString() + ", id =" + applyId);
                                                     that.sendEmail({
                                                         to: to_list,
                                                         cc: cc_list,
-                                                        title: name,
-                                                        imagePath: imagePath
+                                                        title: name
                                                     }, data[0]);
-                                                });
-                                            }
-                                        });
+                                                } else {
+                                                    var imagePath = "static/img/tmp/" + (new Date - 0 + applyId) + ".png";
+                                                    fs.writeFile(path.join(__dirname, "..", imagePath), new Buffer(image, 'base64'), function() {
+                                                        that.sendEmail({
+                                                            to: to_list,
+                                                            cc: cc_list,
+                                                            title: name,
+                                                            imagePath: imagePath
+                                                        }, data[0]);
+                                                    });
+                                                }
+                                            });
+                                        }, 1000 * count)
                                     }
                                 });
                             } else {
-                                logger.error('Send email data format error');
+                                logger.error('Send email data format error by ' + applyId );
                             }
                         }); // jshint ignore:line
                     })(orderByApplyId[applyId], applyId); // jshint ignore:line
@@ -249,7 +252,7 @@ EmailService.prototype = {
         var that = this;
         var date = new Date();
         date.setDate(date.getDate() + 1);
-        var time = GLOBAL.pjconfig.email.time.toString().split(':');
+        var time = global.pjconfig.email.time.toString().split(':');
         date.setHours(parseInt(time[0], 10) || 9, parseInt(time[1], 10) || 0, parseInt(time[2], 10) || 0, 0);
         var timeDiff = date.valueOf() - (new Date()).valueOf();
         setTimeout(function() {
